@@ -1,0 +1,16 @@
+{$EVENTFLOW_DOMAIN} {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	handle /auth/* {
+		reverse_proxy keycloak:8080
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}

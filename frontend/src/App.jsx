@@ -1,5 +1,6 @@
 
-import keycloak from './keycloak'
+import keycloak, { appUrls } from './keycloak'
+import { publicEventsUrl } from './urls'
 import './App.css'
 import React, { useEffect, useState } from 'react'
 
@@ -91,7 +92,7 @@ function App() {
       if (roles.includes('ORGANIZER')) return
 
       try {
-        const response = await fetch('http://localhost:3000/api/users/me', {
+        const response = await fetch(`${appUrls.apiUrl}/api/users/me`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${keycloak.token}`,
@@ -155,7 +156,7 @@ function App() {
 
     try {
       const response = await fetch(
-        'http://localhost:3000/api/organizations/register',
+        `${appUrls.apiUrl}/api/organizations/register`,
         {
           method: 'POST',
           headers: {
@@ -205,7 +206,7 @@ function App() {
     setEventError(false)
 
     try {
-      const response = await fetch('http://localhost:3000/api/events', {
+      const response = await fetch(`${appUrls.apiUrl}/api/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +258,7 @@ function App() {
     setEventsError(false)
 
     try {
-      const response = await fetch('http://localhost:3000/api/events/my', {
+      const response = await fetch(`${appUrls.apiUrl}/api/events/my`, {
         headers: {
           Authorization: `Bearer ${keycloak.token}`
         }
@@ -298,7 +299,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3000/api/events/${event.id}/registrations`,
+        `${appUrls.apiUrl}/api/events/${event.id}/registrations`,
         {
           headers: {
             Authorization: `Bearer ${keycloak.token}`
@@ -351,7 +352,7 @@ function App() {
 
     try {
       const response = await fetch(
-        'http://localhost:3000/api/registrations/my',
+        `${appUrls.apiUrl}/api/registrations/my`,
         {
           headers: {
             Authorization: `Bearer ${keycloak.token}`
@@ -389,7 +390,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3000/api/events/${registration.event_id}/cancel-registration`,
+        `${appUrls.apiUrl}/api/events/${registration.event_id}/cancel-registration`,
         {
           method: 'PATCH',
           headers: {
@@ -427,7 +428,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3000/api/events/${eventId}/publish`,
+        `${appUrls.apiUrl}/api/events/${eventId}/publish`,
         {
           method: 'PATCH',
           headers: {
@@ -463,24 +464,8 @@ function App() {
     setPublicEventsLoading(true)
     setPublicEventsError('')
 
-    const params = new URLSearchParams()
-
-    if (filters.search?.trim()) {
-      params.set('search', filters.search.trim())
-    }
-
-    if (filters.categoryId) {
-      params.set('categoryId', filters.categoryId)
-    }
-
-    if (filters.date) {
-      params.set('date', filters.date)
-    }
-
     try {
-      const response = await fetch(
-        `http://localhost:3000/api/events?${params.toString()}`
-      )
+      const response = await fetch(publicEventsUrl(appUrls.apiUrl, filters))
 
       const data = await response.json()
 
@@ -546,7 +531,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://localhost:3000/api/events/${eventId}/register`,
+        `${appUrls.apiUrl}/api/events/${eventId}/register`,
         {
           method: 'POST',
           headers: {

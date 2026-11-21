@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
+    "test": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=lcov.info",
     "preview": "vite preview"
   },
   "dependencies": {

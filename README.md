@@ -1,5 +1,7 @@
 # EventFlow
 
+[![CI/CD](https://github.com/M-Coh/EventFlow/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/M-Coh/EventFlow/actions/workflows/ci-cd.yml)
+
 ## Opis projekta
 
 EventFlow je spletna aplikacija, namenjena enostavnejši organizaciji dogodkov ter preglednemu upravljanju dogodkov in prijav udeležencev na enem mestu.
@@ -171,7 +173,7 @@ V razdelku **Clients** ustvarimo še drugi client:
 
 V zavihku **Credentials** pridobimo Client Secret in ga vpišemo v `backend/.env` kot vrednost `KEYCLOAK_BACKEND_CLIENT_SECRET`.
 
-Backend client uporablja aplikacija za strežniško upravljanje uporabnikov v Keycloaku. Njegovemu service accountu dodelimo potrebne pravice za upravljanje uporabnikov v razdelku **Service account roles**.
+Backend client uporablja aplikacija za strežniško upravljanje uporabnikov v Keycloaku. V razdelku **Service account roles** servisnemu računu dodelimo `manage-users` in `view-realm` iz odjemalca `realm-management`. V Keycloaku 26.8.2 ali novejšem odjemalcu `eventflow-backend` v **Client scopes** dodamo `kc-admin-api` kot privzeti obseg za Admin REST API. [Navodila za Keycloak](https://www.keycloak.org/docs/26.8.2/upgrading/)
 
 ### 6. Zagon backenda
 
@@ -230,3 +232,47 @@ docker compose down
 ```
 
 Podatki v Docker volumnih se pri tem ohranijo.
+
+## CI/CD in javna namestitev
+
+[Cevovod GitHub Actions](.github/workflows/ci-cd.yml) se zažene ob vsakem pull requestu v `main` in ob vsakem pushu na `main`. Spremembe pripravljamo v ločenih vejah ter jih združujemo prek pull requestov.
+
+| Job | Naloga |
+| --- | --- |
+| `lint` | ESLint preveri frontend in backend. Napake in opozorila ustavijo preverjanje. |
+| `build` | Zgradi frontend z Vite in zapakira backend s produkcijskimi odvisnostmi. Namestitveni paket je artefakt `eventflow-release`. |
+| `test` | Zažene teste obeh delov in objavi poročili LCOV v artefaktu `code-coverage`. Testi trenutno pokrivajo izbrane poti API-ja in frontend logiko za naslove ter filtre. |
+| `deploy` | Po uspehu prvih treh jobov prenese artefakt na strežnik in preveri javne naslove frontenda, API-ja in Keycloaka. Zažene se samo ob pushu na `main`. |
+
+Node.js jobi uporabljajo predpomnilnik npm za obe datoteki `package-lock.json`. Lokalno lahko iz map `frontend` in `backend` poženeš `npm ci`, `npm run lint`, `npm run test:coverage` in `npm run build`.
+
+Javni naslov nastavi spremenljivka `PRODUCTION_URL`. Po uspešni namestitvi je prikazan med [produkcijskimi namestitvami](https://github.com/M-Coh/EventFlow/deployments).
+
+### Nastavitev forka
+
+1. V zavihku **Actions** forka omogoči izvajanje workflowov. Odpri pull request v `main`, da se na GitHubu prikažejo preverbe `lint`, `build` in `test`.
+2. V **Settings → Branches** zaščiti vejo `main`. Zahtevaj pull request pred združitvijo in vključi **Require status checks to pass before merging**. Kot obvezne izberi `lint`, `build` in `test`. Če mora pravilo veljati tudi za lastnika, vključi **Do not allow bypassing the above settings**.
+3. Na veji pull requesta preveri zaščito z začasno lint napako, na primer z neuporabljeno spremenljivko. Ko je `lint` rdeč in je združitev blokirana, napako odpravi v novem commitu in ponovno preveri stanje PR-ja.
+4. V **Settings → Environments** ustvari okolje `production` in dovoli namestitve samo iz `main`.
+
+### Priprava produkcijskega okolja
+
+Namestitev je predvidena na Linux VPS z Docker Compose, javno domeno in dostopom SSH. DNS naj kaže na strežnik, vrata 80 in 443 pa morajo biti dosegljiva za Caddy in HTTPS. Uporabnik SSH potrebuje dostop do Dockerja. GitHub Actions v domači mapi tega uporabnika naloži novo izdajo in zažene Compose z imenom projekta `eventflow`. PostgreSQL in Keycloak shranjujeta podatke v stalnih Docker volumnih. Shema, kategorije in realm se pripravijo ob prvem zagonu praznih baz.
+
+V okolju `production` nastavi naslednje vrednosti.
+
+| Vrsta | Ime | Vrednost |
+| --- | --- | --- |
+| Spremenljivka | `PRODUCTION_URL` | Javni HTTPS naslov aplikacije brez poti |
+| Spremenljivka | `PRODUCTION_SSH_HOST` | Gostiteljsko ime ali IPv4 naslov strežnika SSH |
+| Spremenljivka | `PRODUCTION_SSH_USER` | Uporabnik za namestitev |
+| Secret | `PRODUCTION_SSH_KEY` | Zasebni ključ za namestitev. Pripadajoči javni ključ dodaj uporabniku SSH na strežniku. |
+| Secret | `PRODUCTION_SSH_KNOWN_HOSTS` | Vnos `known_hosts` za strežnik, preverjen pri ponudniku ali na strežniški konzoli |
+| Secret | `POSTGRES_PASSWORD` | Geslo aplikacijske baze |
+| Secret | `KEYCLOAK_DB_PASSWORD` | Geslo baze Keycloak |
+| Secret | `KEYCLOAK_ADMIN_PASSWORD` | Začetno geslo skrbnika Keycloak |
+| Secret | `KEYCLOAK_BACKEND_CLIENT_SECRET` | Skrivnost odjemalca `eventflow-backend` |
+
+Za vsako geslo in skrivnost odjemalca na novo ustvari ločeno vrednost, na primer z `openssl rand -hex 32`. Datoteka okolja na strežniku je dostopna uporabniku, ki izvaja namestitev. Pri menjavi gesel obstoječih baz ali Keycloak odjemalca posodobi tudi vrednosti v teh storitvah.
+
+Build uporablja `VITE_API_URL=/` in `VITE_KEYCLOAK_URL=/auth`. Caddy posreduje `/api/` na backend in `/auth/` na Keycloak, frontend pa servira iz artefakta. Če uporabiš ločeni domeni za API ali Keycloak, lahko javna naslova prepišeš z repozitorijskima spremenljivkama `VITE_API_URL` in `VITE_KEYCLOAK_URL` pred gradnjo.

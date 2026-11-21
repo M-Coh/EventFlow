@@ -1,0 +1,99 @@
+services:
+  frontend:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      EVENTFLOW_DOMAIN: ${EVENTFLOW_DOMAIN:?Set the public hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend/dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  backend:
+    image: node:24-bookworm-slim
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "server.js"]
+    environment:
+      NODE_ENV: production
+      PGHOST: postgres
+      PGDATABASE: eventflow
+      PGUSER: eventflow
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set the application database password}
+      KEYCLOAK_ISSUER: https://${EVENTFLOW_DOMAIN}/auth/realms/EventFlow
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/auth/realms/EventFlow/protocol/openid-connect/certs
+      KEYCLOAK_URL: http://keycloak:8080/auth
+      KEYCLOAK_REALM: EventFlow
+      KEYCLOAK_BACKEND_CLIENT_ID: eventflow-backend
+      KEYCLOAK_BACKEND_CLIENT_SECRET: ${KEYCLOAK_BACKEND_CLIENT_SECRET:?Set the Keycloak client secret}
+    volumes:
+      - ./backend/build:/app:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eventflow
+      POSTGRES_USER: eventflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the application database password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/build/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./deploy/categories.sql:/docker-entrypoint-initdb.d/02-categories.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U eventflow -d eventflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  keycloak-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set the Keycloak database password}
+    volumes:
+      - keycloak_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_HOSTNAME: https://${EVENTFLOW_DOMAIN}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set the Keycloak database password}
+      KC_BOOTSTRAP_ADMIN_USERNAME: eventflow-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set the Keycloak admin password}
+      EVENTFLOW_ORIGIN: https://${EVENTFLOW_DOMAIN}
+      EVENTFLOW_CLIENT_SECRET: ${KEYCLOAK_BACKEND_CLIENT_SECRET:?Set the Keycloak client secret}
+    volumes:
+      - ./deploy/EventFlow-realm.json:/opt/keycloak/data/import/EventFlow-realm.json:ro
+      - ./keycloak/themes/eventflow:/opt/keycloak/themes/eventflow:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  keycloak_data:
+  caddy_data:
+  caddy_config:

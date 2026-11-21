@@ -1,0 +1,130 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix backend
+      - run: npm run lint --prefix frontend
+      - run: npm run lint --prefix backend
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+      - run: npm ci --prefix frontend
+      - name: Build frontend
+        run: npm run build --prefix frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL || '/' }}
+          VITE_KEYCLOAK_URL: ${{ vars.VITE_KEYCLOAK_URL || '/auth' }}
+      - name: Package backend and install production dependencies
+        run: |
+          npm run build --prefix backend
+          npm ci --prefix backend/build --omit=dev
+      - name: Package release
+        run: |
+          mkdir -p release/frontend release/backend release/deploy release/keycloak/themes
+          cp -r frontend/dist release/frontend/
+          cp -r backend/build release/backend/
+          cp deploy/Caddyfile deploy/categories.sql deploy/EventFlow-realm.json release/deploy/
+          cp -r keycloak/themes/eventflow release/keycloak/themes/
+          cp deploy/compose.yml release/compose.yml
+          tar -czf eventflow.tar.gz -C release .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: eventflow-release
+          path: eventflow.tar.gz
+          if-no-files-found: error
+          overwrite: true
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix backend
+      - name: Run frontend and backend tests
+        run: |
+          status=0
+          npm run test:coverage --prefix frontend || status=1
+          npm run test:coverage --prefix backend || status=1
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: code-coverage
+          path: |
+            frontend/lcov.info
+            backend/lcov.info
+          if-no-files-found: error
+          overwrite: true
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint, build, test]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: eventflow-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: eventflow-release
+          path: release-artifact
+      - name: Deploy and verify the release
+        run: bash deploy/publish.sh release-artifact/eventflow.tar.gz
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          PRODUCTION_SSH_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+          PRODUCTION_SSH_USER: ${{ vars.PRODUCTION_SSH_USER }}
+          PRODUCTION_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          KEYCLOAK_DB_PASSWORD: ${{ secrets.KEYCLOAK_DB_PASSWORD }}
+          KEYCLOAK_ADMIN_PASSWORD: ${{ secrets.KEYCLOAK_ADMIN_PASSWORD }}
+          KEYCLOAK_BACKEND_CLIENT_SECRET: ${{ secrets.KEYCLOAK_BACKEND_CLIENT_SECRET }}

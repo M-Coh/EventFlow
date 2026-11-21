@@ -4,6 +4,8 @@ const josePromise = import("jose");
 const KEYCLOAK_ISSUER =
   process.env.KEYCLOAK_ISSUER ||
   "http://localhost:8081/realms/EventFlow";
+const KEYCLOAK_JWKS_URL = process.env.KEYCLOAK_JWKS_URL ||
+  `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`;
 
 let jwks;
 
@@ -22,11 +24,7 @@ async function authenticateToken(req, res, next) {
     const { createRemoteJWKSet, jwtVerify } = await josePromise;
 
     if (!jwks) {
-      jwks = createRemoteJWKSet(
-        new URL(
-          `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`
-        )
-      );
+      jwks = createRemoteJWKSet(new URL(KEYCLOAK_JWKS_URL));
     }
 
     const { payload } = await jwtVerify(token, jwks, {

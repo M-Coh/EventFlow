@@ -974,6 +974,10 @@ app.patch(
   }
 );
 
-app.listen(PORT, () => {
-  console.log(`EventFlow backend deluje na portu ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`EventFlow backend deluje na portu ${PORT}`);
+  });
+}
+
+module.exports = app;

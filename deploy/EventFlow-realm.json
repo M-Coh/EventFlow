@@ -1,0 +1,56 @@
+{
+  "realm": "EventFlow",
+  "enabled": true,
+  "sslRequired": "all",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "duplicateEmailsAllowed": false,
+  "loginTheme": "eventflow",
+  "roles": {
+    "realm": [
+      { "name": "PARTICIPANT" },
+      { "name": "ORGANIZER" },
+      { "name": "ADMIN" }
+    ]
+  },
+  "defaultRoles": ["PARTICIPANT"],
+  "clients": [
+    {
+      "clientId": "eventflow-frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "rootUrl": "${EVENTFLOW_ORIGIN}",
+      "baseUrl": "${EVENTFLOW_ORIGIN}",
+      "redirectUris": ["${EVENTFLOW_ORIGIN}/*"],
+      "webOrigins": ["${EVENTFLOW_ORIGIN}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${EVENTFLOW_ORIGIN}/*"
+      }
+    },
+    {
+      "clientId": "eventflow-backend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${EVENTFLOW_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["roles", "kc-admin-api"]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-eventflow-backend",
+      "enabled": true,
+      "serviceAccountClientId": "eventflow-backend",
+      "clientRoles": { "realm-management": ["manage-users", "view-realm"] }
+    }
+  ]
+}
