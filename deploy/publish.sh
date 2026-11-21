@@ -47,3 +47,5 @@ curl --fail --silent --show-error --retry 24 --retry-delay 5 --retry-all-errors 
 curl --fail --silent --show-error --retry 24 --retry-delay 5 --retry-all-errors \
   "$production_url/auth/realms/EventFlow/.well-known/openid-configuration" \
   | jq --exit-status --arg issuer "$production_url/auth/realms/EventFlow" '.issuer == $issuer' > /dev/null
+
+printf 'url=%s\n' "$production_url" >> "$GITHUB_OUTPUT"

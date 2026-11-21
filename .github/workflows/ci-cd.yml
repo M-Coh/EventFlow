@@ -107,7 +107,7 @@ jobs:
       cancel-in-progress: false
     environment:
       name: production
-      url: ${{ vars.PRODUCTION_URL }}
+      url: ${{ steps.publish.outputs.url }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -117,6 +117,7 @@ jobs:
           name: eventflow-release
           path: release-artifact
       - name: Deploy and verify the release
+        id: publish
         run: bash deploy/publish.sh release-artifact/eventflow.tar.gz
         env:
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
